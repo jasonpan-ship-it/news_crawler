@@ -101,7 +101,7 @@ def send_split_emails(df):
     today_str = datetime.now().strftime("%Y-%m-%d")
 
     # 設定顯示名稱
-    SENDER_NAME = "綠能情報員" 
+    SENDER_NAME = "每日新聞小幫手" 
     RECEIVER_NAME = "麗升能源集團" 
 
     # 邏輯：有公司關鍵字 -> Group A (競業)；沒有 -> Group B (產業)
