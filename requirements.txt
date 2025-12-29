@@ -4,3 +4,5 @@ pygsheets
 beautifulsoup4
 requests
 lxml
+gspread
+openai
