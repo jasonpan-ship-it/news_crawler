@@ -150,4 +150,29 @@ with st.sidebar:
     st.divider()
 
     # 步驟三：發信
-    st.
+    st.header("3️⃣ 正式發信")
+    if st.button("📧 依照目前畫面發信", use_container_width=True):
+        if send_python_email(st.session_state.edited_df):
+            st.balloons()
+            st.success("郵件發送成功！")
+
+# --- 4. 主畫面：編輯清單 ---
+st.write("### 📝 編輯發佈清單")
+st.caption("提示：點擊標題連結可開啟網頁；選取行按 Delete 可刪除。")
+
+if not st.session_state.edited_df.empty:
+    # 這裡顯示你的資料，並將網址設為可點擊
+    st.session_state.edited_df = st.data_editor(
+        st.session_state.edited_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        column_config={
+            "日期": st.column_config.TextColumn("日期", disabled=True),
+            "網址": st.column_config.LinkColumn("標題連結", width="medium"),
+            "標題": st.column_config.TextColumn("標題", width="large"),
+            "AI 新聞摘要": st.column_config.TextColumn("AI 新聞摘要", width="large")
+        },
+        column_order=["日期", "來源", "標題", "網址", "AI 新聞摘要"]
+    )
+else:
+    st.info("👈 請先選擇日期並執行步驟一。")
