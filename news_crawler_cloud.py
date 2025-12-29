@@ -124,4 +124,9 @@ if not st.session_state.edited_df.empty:
             "日期": st.column_config.TextColumn("日期", disabled=True),
         },
         # 隱藏不需要直接編輯的技術欄位
-        column_order=["日期", "來源", "標題
+        column_order=["日期", "來源", "標題", "包含公司關鍵字", "AI 新聞摘要", "新聞網址"]
+    )
+    # 保存編輯後的結果
+    st.session_state.edited_df = edited_df
+else:
+    st.info("👈 請先從左側選擇日期並執行步驟一抓取新聞。")
