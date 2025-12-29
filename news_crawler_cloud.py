@@ -148,7 +148,7 @@ with st.sidebar:
     e_date = st.date_input("結束日期", today_dt)
     
     if st.button("🚀 執行爬蟲", use_container_width=True):
-        with st.spinner("正在執行全網爬蟲..."):
+        with st.spinner("正在努力爬..."):
             start_date_obj = datetime.combine(s_date, datetime.min.time())
             end_date_obj = datetime.combine(e_date, datetime.max.time())
             
@@ -310,7 +310,7 @@ with st.sidebar:
                     "日期": dates, "來源": sources, "分類": categories,
                     "包含標題關鍵字": title_keyword_matches, "包含公司關鍵字": company_matches,
                     "標題": titles, "網址": links, "AI 新聞摘要": ""
-                }).drop_duplicates(subset=["標題"]).sort_values(by="日期", ascending=False)
+                }).drop_duplicates(subset=["標題"]).sort_values(by="日期", ascending=False).reset_index(drop=True)
                 
                 # 建立隱藏的原文連結欄位供 UI 顯示
                 df["原文連結"] = df["網址"] 
@@ -322,13 +322,13 @@ with st.sidebar:
     st.divider()
 
     # 步驟二
-    st.header("2️⃣ 產生摘要")
-    if st.button("🤖 產生摘要", use_container_width=True):
+    st.header("2️⃣ 產生AI摘要")
+    if st.button("點我", use_container_width=True):
         if not st.session_state.edited_df.empty:
             client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
             for idx, row in st.session_state.edited_df.iterrows():
                 if not row['AI 新聞摘要']:
-                    st.write(f"正在摘要: {row['標題'][:15]}...")
+                    st.write(f"摘要產生中: {row['標題'][:15]}...")
                     text = extract_webpage_text(row['網址'])
                     if text:
                         try:
@@ -344,7 +344,7 @@ with st.sidebar:
 
     # 步驟三
     st.header("3️⃣ 正式發信")
-    if st.button("📧 分開發送電子報", use_container_width=True):
+    if st.button("發信給全公司", use_container_width=True):
         if not st.session_state.edited_df.empty:
             if send_split_emails(st.session_state.edited_df):
                 st.balloons()
