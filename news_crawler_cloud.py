@@ -135,11 +135,11 @@ with st.sidebar:
 
     st.divider()
     st.header("2️⃣ 人工審核文章")
-    st.link_button("📂 開啟 Sheets 刪減", "https://docs.google.com/spreadsheets/d/1b2UEnsJ0hASkqpR3n9VgfLoIkTRgrHtm8aYbzRho5BA/edit", use_container_width=True)
+    st.link_button("去新聞大表刪除沒營養的文章", "https://docs.google.com/spreadsheets/d/1b2UEnsJ0hASkqpR3n9VgfLoIkTRgrHtm8aYbzRho5BA/edit", use_container_width=True)
 
     st.divider()
     st.header("3️⃣ AI 自動摘要")
-    if st.button("🤖 執行 OpenAI 摘要", use_container_width=True):
+    if st.button("產生AI摘要", use_container_width=True):
         client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
         sheet = get_gspread_wks()
         rows = sheet.get_all_values()
@@ -161,7 +161,7 @@ with st.sidebar:
 
     st.divider()
     st.header("4️⃣ 正式發信")
-    if st.button("📧 發送電子報", use_container_width=True):
+    if st.button("發送電子報", use_container_width=True):
         key = st.secrets.get("GAS_API_KEY", "")
         gas_url = f"https://script.google.com/macros/s/AKfycbwdJ3IukgLTY0MRVrmGiwRvw9OVW5CeSKaP98VrQsz5cG_1CE4ZAyLNODv3H_AU2n8h/exec?key={key}"
         if requests.get(gas_url).status_code == 200:
