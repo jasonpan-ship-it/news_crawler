@@ -135,7 +135,7 @@ with st.sidebar:
 
     st.divider()
     st.header("2️⃣ 人工審核文章")
-    st.link_button("去新聞大表刪除沒營養的文章", "https://docs.google.com/spreadsheets/d/1b2UEnsJ0hASkqpR3n9VgfLoIkTRgrHtm8aYbzRho5BA/edit", use_container_width=True)
+    st.link_button("去刪除沒營養的文章", "https://docs.google.com/spreadsheets/d/1b2UEnsJ0hASkqpR3n9VgfLoIkTRgrHtm8aYbzRho5BA/edit", use_container_width=True)
 
     st.divider()
     st.header("3️⃣ AI 自動摘要")
