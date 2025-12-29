@@ -362,7 +362,7 @@ with st.sidebar:
 
 # --- 4. 主畫面 ---
 st.write("### 📝 編輯發佈清單")
-st.caption("提示：選取行並按 Delete 可刪除；公司關鍵字欄位可依據發信需求手動修改，有關鍵字的會發一封「競業新聞」、沒關鍵字的會發一封「產業新聞」。")
+st.caption("提示：選取行並按 Delete 可刪除；欄位可依據發信需求手動修改，有公司關鍵字的會發在「競業新聞」、沒關鍵字的會發在「產業新聞」。")
 
 if not st.session_state.edited_df.empty:
     st.session_state.edited_df = st.data_editor(
