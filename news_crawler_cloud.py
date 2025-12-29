@@ -6,6 +6,8 @@ from openai import OpenAI
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.header import Header
+from email.utils import formataddr
 from urllib.parse import quote
 import urllib.request as req
 import bs4
@@ -97,7 +99,11 @@ def send_split_emails(df):
     password = st.secrets["EMAIL_PASSWORD"]
     receiver = st.secrets["EMAIL_RECEIVER"]
     today_str = datetime.now().strftime("%Y-%m-%d")
-    
+
+    # 設定顯示名稱
+    SENDER_NAME = "綠能情報員" 
+    RECEIVER_NAME = "麗升能源集團" 
+
     # 邏輯：有公司關鍵字 -> Group A (競業)；沒有 -> Group B (產業)
     def has_company_kw(val):
         if not val or pd.isna(val): return False
@@ -115,9 +121,10 @@ def send_split_emails(df):
             if not group_a.empty:
                 msg = MIMEMultipart()
                 msg['Subject'] = f"{today_str} 競業新聞整理"
-                msg['From'] = f"新聞機器人 <{sender}>"
-                msg['To'] = receiver
-                # show_company_col=True
+                msg['From'] = formataddr((str(Header(SENDER_NAME, 'utf-8')), sender))
+                msg['To'] = formataddr((str(Header(RECEIVER_NAME, 'utf-8')), receiver))
+                
+                # show_company_col=True -> 顯示公司欄位
                 msg.attach(MIMEText(build_html_body("本日競業新聞整理如下：", group_a, show_company_col=True), 'html'))
                 server.send_message(msg)
                 st.toast(f"✅ 競業新聞 ({len(group_a)} 封) 已發送")
@@ -126,9 +133,10 @@ def send_split_emails(df):
             if not group_b.empty:
                 msg = MIMEMultipart()
                 msg['Subject'] = f"{today_str} 產業新聞整理"
-                msg['From'] = f"新聞機器人 <{sender}>"
-                msg['To'] = receiver
-                # show_company_col=False
+                msg['From'] = formataddr((str(Header(SENDER_NAME, 'utf-8')), sender))
+                msg['To'] = formataddr((str(Header(RECEIVER_NAME, 'utf-8')), receiver))
+                
+                # show_company_col=False -> 隱藏公司欄位
                 msg.attach(MIMEText(build_html_body("本日產業新聞整理如下：", group_b, show_company_col=False), 'html'))
                 server.send_message(msg)
                 st.toast(f"✅ 產業新聞 ({len(group_b)} 封) 已發送")
@@ -139,7 +147,7 @@ def send_split_emails(df):
 
 # --- 3. 側邊欄 ---
 with st.sidebar:
-    st.title("⚡ 綠能發佈系統")
+    st.title("⚡ 綠能新聞爬蟲")
     
     st.header("1️⃣ 抓取新聞資料")
     today_dt = pd.Timestamp.now().normalize()
@@ -148,7 +156,7 @@ with st.sidebar:
     e_date = st.date_input("結束日期", today_dt)
     
     if st.button("🚀 執行爬蟲", use_container_width=True):
-        with st.spinner("正在努力爬..."):
+        with st.spinner("正在努力的爬..."):
             start_date_obj = datetime.combine(s_date, datetime.min.time())
             end_date_obj = datetime.combine(e_date, datetime.max.time())
             
@@ -354,7 +362,7 @@ with st.sidebar:
 
 # --- 4. 主畫面 ---
 st.write("### 📝 編輯發佈清單")
-st.caption("提示：點擊「(查看)」可跳轉原文；選取行並按 Delete 可刪除；公司關鍵字欄位可依據發信需求手動修改。")
+st.caption("提示：選取行並按 Delete 可刪除；公司關鍵字欄位可依據發信需求手動修改，有關鍵字的會發一封「競業新聞」、沒關鍵字的會發一封「產業新聞」。")
 
 if not st.session_state.edited_df.empty:
     st.session_state.edited_df = st.data_editor(
