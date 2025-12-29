@@ -39,8 +39,11 @@ def extract_webpage_text(url):
     except:
         return ""
 
-def build_html_body(title_text, df):
-    """建立符合您格式要求的 HTML 表格"""
+def build_html_body(title_text, df, show_company_col=True):
+    """
+    建立符合您格式要求的 HTML 表格
+    show_company_col: 控制是否顯示「公司」欄位
+    """
     intro = f"""
     {title_text}<br>
     <p style="color:gray; font-style:italic;">
@@ -55,25 +58,34 @@ def build_html_body(title_text, df):
         except:
             d_str = str(row['日期'])
 
-        # 公司關鍵字顯示
+        # 公司關鍵字顯示處理
         comp_kw = row.get('包含公司關鍵字', '-')
         if pd.isna(comp_kw) or comp_kw == "": comp_kw = "-"
+
+        # 根據參數決定是否產生公司欄位的 HTML
+        company_td = f"<td style='border:1px solid #333; padding:8px;'>{comp_kw}</td>" if show_company_col else ""
 
         html_rows += f"""
         <tr>
             <td style='border:1px solid #333; padding:8px;'>{d_str}</td>
             <td style='border:1px solid #333; padding:8px;'><a href='{row['網址']}'>{row['標題']}</a></td>
-            <td style='border:1px solid #333; padding:8px;'>{comp_kw}</td>
+            {company_td}
             <td style='border:1px solid #333; padding:8px;'>{row.get('AI 新聞摘要', '')}</td>
         </tr>"""
     
+    # 表頭處理：根據參數決定是否顯示「公司」表頭
+    company_th = '<th style="width:10%;">公司</th>' if show_company_col else ''
+    
+    # 調整摘要欄位寬度 (如果隱藏公司欄，摘要欄可以寬一點)
+    summary_width = "60%" if show_company_col else "70%"
+
     table_html = f"""
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 14px; border: 1px solid #333;">
         <thead><tr style="background-color: #f2f2f2; text-align: left;">
             <th style="width:5%;">日期</th>
             <th style="width:25%;">標題</th>
-            <th style="width:10%;">公司</th>
-            <th style="width:60%;">AI摘要</th>
+            {company_th}
+            <th style="width:{summary_width};">AI摘要</th>
         </tr></thead>
         <tbody>{html_rows}</tbody>
     </table>
@@ -99,23 +111,25 @@ def send_split_emails(df):
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
             server.login(sender, password)
             
-            # 發送 Group A
+            # 發送 Group A: 競業新聞 (顯示公司欄位)
             if not group_a.empty:
                 msg = MIMEMultipart()
                 msg['Subject'] = f"{today_str} 競業新聞整理"
                 msg['From'] = f"新聞機器人 <{sender}>"
                 msg['To'] = receiver
-                msg.attach(MIMEText(build_html_body("本日競業新聞整理如下：", group_a), 'html'))
+                # show_company_col=True
+                msg.attach(MIMEText(build_html_body("本日競業新聞整理如下：", group_a, show_company_col=True), 'html'))
                 server.send_message(msg)
                 st.toast(f"✅ 競業新聞 ({len(group_a)} 封) 已發送")
 
-            # 發送 Group B
+            # 發送 Group B: 產業新聞 (隱藏公司欄位)
             if not group_b.empty:
                 msg = MIMEMultipart()
                 msg['Subject'] = f"{today_str} 產業新聞整理"
                 msg['From'] = f"新聞機器人 <{sender}>"
                 msg['To'] = receiver
-                msg.attach(MIMEText(build_html_body("本日產業新聞整理如下：", group_b), 'html'))
+                # show_company_col=False
+                msg.attach(MIMEText(build_html_body("本日產業新聞整理如下：", group_b, show_company_col=False), 'html'))
                 server.send_message(msg)
                 st.toast(f"✅ 產業新聞 ({len(group_b)} 封) 已發送")
         return True
@@ -139,8 +153,6 @@ with st.sidebar:
             end_date_obj = datetime.combine(e_date, datetime.max.time())
             
             # === 以下為您 news_competitor.py 的完整清單與邏輯 ===
-            
-            # 初始化
             dates, sources, categories, company_matches, title_keyword_matches, titles, links = [], [], [], [], [], [], []
             
             keywords = ["太陽能", "再生能源", "電廠", "綠電", "光電",  "風電", "儲能", "綠電交易", "麗升能源", "綠能"]
