@@ -75,7 +75,7 @@ with st.sidebar:
                         sources.append(source)
                         categories.append(category)
                         title_keyword_matches.append(", ".join(m_title))
-                        company_matches.append(", ".join(m_comp) if m_comp else "-")
+                        company_matches.append(", ".join(m_comp) if m_comp else "")
                         titles.append(title)
                         links.append(url)
 
