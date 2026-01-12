@@ -311,7 +311,42 @@ with st.sidebar:
                                 append_news(title, href, date_obj, "ETtoday", kw)
                             except: continue
                 except: continue
-
+            # --- 行政院公報 爬蟲 ---
+            try:
+                # 行政院公報搜尋「再生能源」的 URL
+                gazette_url = "https://gazette.nat.gov.tw/egFront/advancedSearchResult.do?action=doQuery&keywords=%E5%86%8D%E7%94%9F%E8%83%BD%E6%BA%90&fields=text"
+                res = requests.get(gazette_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+                soup = BeautifulSoup(res.text, "html.parser")
+                
+                # 根據公報表格結構抓取，通常在 class 為 'table_list' 的 tr 裡
+                rows = soup.select("tr[class^='table_list_']") # 選取 table_list_1, table_list_2...
+                
+                for row in rows:
+                    tds = row.find_all("td")
+                    if len(tds) >= 4:
+                        # 行政院公報日期通常在第 2 欄 (格式如 113/05/20)
+                        roc_date = tds[1].text.strip() 
+                        try:
+                            # 轉換民國年為西元年
+                            yy, mm, dd = roc_date.split('/')
+                            ad_year = int(yy) + 1911
+                            date_obj = datetime(ad_year, int(mm), int(dd))
+                        except:
+                            continue
+            
+                        # 標題與連結通常在第 4 欄
+                        a_tag = tds[3].find("a")
+                        if a_tag:
+                            title = a_tag.text.strip()
+                            # 處理相對路徑
+                            href = a_tag["href"]
+                            full_link = f"https://gazette.nat.gov.tw{href}" if href.startswith("/") else href
+                            
+                            # 使用你原本定義的過濾與存入函式
+                            append_news(title, full_link, date_obj, "行政院公報", "法規/公告")
+            except Exception as e:
+                st.write(f"行政院公報爬取失敗: {e}")
+                
             # --- 結果彙整 ---
             if titles:
                 df = pd.DataFrame({
