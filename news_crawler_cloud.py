@@ -269,48 +269,64 @@ with st.sidebar:
                         except: continue
                 except: continue
 
-            # --- 自由時報 ---
-            ltn_urls = [
-                ("https://news.ltn.com.tw/topic/%E7%B6%A0%E8%83%BD", "綠能"),
-                ("https://news.ltn.com.tw/topic/%E5%A4%AA%E9%99%BD%E8%83%BD", "太陽能")
-            ]
+            # --- 自由時報 修復版 ---
             for url, cat in ltn_urls:
                 try:
-                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+                    res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                     soup = BeautifulSoup(res.text, "html.parser")
-                    for item in soup.select("ul.list li"):
-                        t_tag = item.find("h3", class_="title")
+                    # 自由時報話題頁面通常是 ul.tag_focus 或 ul.list
+                    items = soup.select("ul.tag_focus li") or soup.select("ul.list li")
+                    
+                    for item in items:
+                        t_tag = item.find("h3") # 話題頁面的標題通常在 h3
                         time_tag = item.find("span", class_="time")
-                        l_tag = item.find("a", class_="tit")
-                        if t_tag and time_tag and l_tag:
-                            title = t_tag.text.strip()
-                            href = "https:" + l_tag["href"] if l_tag["href"].startswith("//") else l_tag["href"]
+                        l_tag = item.find("a")
+                        
+                        if t_tag and l_tag:
+                            title = t_tag.get_text(strip=True)
+                            href = l_tag["href"]
+                            if not href.startswith("http"):
+                                href = "https://news.ltn.com.tw/" + href.lstrip("/")
+                            
+                            # 日期解析 (自由時報格式通常為 YYYY/MM/DD HH:MM)
                             try:
-                                date_obj = datetime.strptime(time_tag.text.strip()[:10], "%Y/%m/%d")
+                                date_str = time_tag.text.strip()[:10]
+                                date_obj = datetime.strptime(date_str, "%Y/%m/%d")
                                 append_news(title, href, date_obj, "自由時報", cat)
-                            except: continue
-                except: continue
+                            except:
+                                continue
+                except Exception as e:
+                    print(f"LTN Error: {e}")
 
-            # --- ETtoday ---
+            # --- ETtoday 修復版 ---
             for kw in keywords:
                 try:
-                    u = f"https://www.ettoday.net/news_search/doSearch.php?search_term_string={quote(kw)}"
-                    res = requests.get(u, headers={"User-Agent": "Mozilla/5.0"})
+                    # 增加 idx=1 確保是新聞列表格式
+                    u = f"https://www.ettoday.net/news_search/doSearch.php?search_term_string={quote(kw)}&idx=1"
+                    res = requests.get(u, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                     soup = BeautifulSoup(res.text, "html.parser")
-                    for art in soup.select("div.box_2"):
+                    
+                    # ETtoday 搜尋結果在 div.archive_list 或 div.box_2
+                    for art in soup.select("div.archive_list div.box_2"):
                         h2 = art.find("h2")
                         if not h2 or not h2.find("a"): continue
+                        
                         title = h2.find("a").text.strip()
                         href = h2.find("a")["href"]
-                        detail = art.find("p", class_="detail")
-                        if detail and detail.find("span", class_="date"):
-                            raw_text = detail.find("span", class_="date").get_text()
+                        
+                        date_tag = art.find("span", class_="date")
+                        if date_tag:
+                            # 處理日期格式 (2025/01/10 15:30)
                             try:
-                                d_str = raw_text.split("/")[-1].replace(")", "").strip()
-                                date_obj = datetime.strptime(d_str, "%Y-%m-%d %H:%M")
+                                # 去除括號
+                                d_str = date_tag.text.replace("(", "").replace(")", "").strip()
+                                # 格式: 2025/01/10 15:30
+                                date_obj = datetime.strptime(d_str, "%Y/%m/%d %H:%M")
                                 append_news(title, href, date_obj, "ETtoday", kw)
-                            except: continue
-                except: continue
+                            except:
+                                continue
+                except Exception as e:
+                    print(f"ETtoday Error: {e}")
             # --- 行政院公報 爬蟲 ---
             try:
                 # 行政院公報搜尋「再生能源」的 URL
