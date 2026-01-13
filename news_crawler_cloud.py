@@ -308,7 +308,7 @@ with st.sidebar:
             # ==========================================
             for kw in keywords:
                 try:
-                    u = f"https://www.ettoday.net/news_search/doSearch.php?search_term_string={quote(kw)}&idx=1"
+                    u = f"https://www.ettoday.net/news_search/doSearch.php?keywords={quote(kw)}&idx=1"
                     # 關鍵修正：加入 verify=False 忽略 SSL 驗證
                     res = requests.get(u, headers=headers, timeout=10, verify=False)
                     soup = BeautifulSoup(res.text, "html.parser")
