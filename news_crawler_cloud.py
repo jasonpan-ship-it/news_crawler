@@ -160,27 +160,46 @@ with st.sidebar:
             start_date_obj = datetime.combine(s_date, datetime.min.time())
             end_date_obj = datetime.combine(e_date, datetime.max.time())
             
-            # 初始化儲存列表
             dates, sources, categories, company_matches, title_keyword_matches, titles, links = [], [], [], [], [], [], []
             
-            # 關鍵字設定
             keywords = ["太陽能", "再生能源", "電廠", "綠電", "光電",  "風電", "儲能", "綠電交易", "麗升能源", "綠能"]
             
-            # (在此省略您原本冗長的 company_keywords 定義，請保留您原本的列表)
-            # 假設這裡有您的 company_keywords 與 title_keywords...
-            # 為了讓程式碼簡潔，我直接沿用您原本的 append_news 函式邏輯
-            
+            # --- 萬用日期解析小工具 (新增這個!) ---
+            def parse_flexible_date(date_text):
+                """嘗試多種格式解析日期，失敗回傳 None"""
+                if not date_text: return None
+                # 清理雜質：去除括號、頭尾空白
+                clean_text = date_text.replace("(", "").replace(")", "").strip()
+                # 只取前半段日期部分 (避開時間造成的格式混亂)
+                # 例如 "2025/01/13 15:30" -> "2025/01/13"
+                clean_text = clean_text.split(" ")[0] 
+                
+                formats = [
+                    "%Y/%m/%d", # 2025/01/13
+                    "%Y-%m-%d", # 2025-01-13
+                    "%Y.%m.%d", # 2025.01.13
+                    "%Y%m%d"    # 20250113
+                ]
+                
+                for fmt in formats:
+                    try:
+                        return datetime.strptime(clean_text, fmt)
+                    except ValueError:
+                        continue
+                return None
+
             def find_company_keywords(text):
                 return [k for k in company_keywords if k in text]
 
             def append_news(title, url, date_obj, source, category):
+                # 確保 date_obj 是有效的
+                if not date_obj: return
+
                 if start_date_obj <= date_obj <= end_date_obj:
-                    # 檢查標題關鍵字
                     matched_title_keywords = [k for k in title_keywords if k in title]
-                    if not matched_title_keywords:
-                        return
+                    # 如果標題沒有關鍵字就跳過
+                    if not matched_title_keywords: return
                     
-                    # 檢查公司關鍵字
                     matched_company_keywords = find_company_keywords(title)
                     
                     dates.append(date_obj.strftime("%Y-%m-%d"))
@@ -191,7 +210,7 @@ with st.sidebar:
                     titles.append(title)
                     links.append(url)
 
-            # --- 1. Yahoo 爬蟲 (維持原樣) ---
+            # --- 1. Yahoo 爬蟲 ---
             headers = {"User-Agent": "Mozilla/5.0"}
             for kw in keywords:
                 try:
@@ -210,18 +229,22 @@ with st.sidebar:
                         if meta_div:
                             time_str = meta_div.text.strip().split("•")[-1].strip()
                             today = datetime.now()
+                            # 處理相對時間
                             if "天前" in time_str:
                                 try: date_obj = today - dt.timedelta(days=int(time_str.replace("天前", "")))
                                 except: pass
                             elif "小時前" in time_str or "分鐘前" in time_str: date_obj = today
                             elif "年" in time_str:
-                                try: date_obj = datetime.strptime(time_str.replace("早上","").replace("下午","").replace("晚上","").replace("年","-").replace("月","-").replace("日","").split()[0], "%Y-%m-%d")
+                                # 嘗試解析 Yahoo 的 "2023年5月20日" 格式
+                                try: 
+                                    date_str = time_str.replace("早上","").replace("下午","").replace("晚上","").replace("年","-").replace("月","-").replace("日","").split()[0]
+                                    date_obj = parse_flexible_date(date_str)
                                 except: continue
                         if date_obj: append_news(title, full_link, date_obj, "Yahoo", kw)
                     tt.sleep(0.5)
                 except: continue
 
-            # --- 2. UDN 爬蟲 (維持原樣) ---
+            # --- 2. UDN 爬蟲 ---
             for i in range(len(keywords)):
                 try:
                     kw = keywords[i]
@@ -239,13 +262,14 @@ with st.sidebar:
                         if not a_tag or l >= len(ti_time): continue
                         title = a_tag.get_text(strip=True)
                         href = a_tag.get("href")
-                        try:
-                            date_obj = datetime.strptime(ti_time[l].get_text(strip=True)[:10], "%Y-%m-%d")
+                        
+                        # 使用萬用解析
+                        date_obj = parse_flexible_date(ti_time[l].get_text(strip=True))
+                        if date_obj:
                             append_news(title, href, date_obj, "UDN", kw)
-                        except: continue
                 except: continue
 
-            # --- 3. MoneyDJ 爬蟲 (維持原樣) ---
+            # --- 3. MoneyDJ 爬蟲 ---
             urls_mdj = [
                 ("https://www.moneydj.com/kmdj/common/listnewarticles.aspx?svc=NW&a=X0300023", "能源"),
                 ("https://www.moneydj.com/kmdj/common/listnewarticles.aspx?index1=2&svc=NW&a=X0300023", "能源"),
@@ -266,15 +290,17 @@ with st.sidebar:
                         if not t_tag.a: continue
                         href = "https://www.moneydj.com/" + t_tag.a.get("href")
                         title = t_tag.a.text.strip().replace("-MoneyDJ理財網", "")
-                        try:
-                            raw_date = times7[i * 3].text.strip()
-                            date_obj = datetime.strptime(f"{base_year}/{raw_date}", "%Y/%m/%d")
+                        
+                        raw_date = times7[i * 3].text.strip() # 通常是 01/13
+                        full_date_str = f"{base_year}/{raw_date}"
+                        date_obj = parse_flexible_date(full_date_str)
+                        
+                        if date_obj:
                             append_news(title, href, date_obj, "MoneyDJ", cat)
-                        except: continue
                 except: continue
 
             # --- 4. 自由時報 (LTN) 修復版 ---
-            # 定義 LTN 的目標網址 (補上這段)
+            # LTN 網址清單
             ltn_urls = [
                 ("https://news.ltn.com.tw/topic/再生能源", "再生能源"),
                 ("https://news.ltn.com.tw/topic/太陽能", "太陽能"),
@@ -287,15 +313,12 @@ with st.sidebar:
                     res = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                     soup = BeautifulSoup(res.text, "html.parser")
                     
-                    # LTN 結構更新：優先抓 ul.searchlist (列表頁常見)，其次抓 ul.tag_focus
+                    # 抓取列表項目
                     items = soup.select("ul.searchlist li") or soup.select("ul.tag_focus li") or soup.select("ul.list li")
                     
                     for item in items:
-                        # 排除廣告
-                        if "class" in item.attrs and "ad" in item.attrs["class"]:
-                            continue
+                        if "class" in item.attrs and "ad" in item.attrs["class"]: continue
 
-                        # 嘗試抓標題 (結構可能是 h3 或 div.tit)
                         t_tag = item.find("h3") or item.find("div", class_="tit")
                         l_tag = item.find("a")
                         time_tag = item.find("span", class_="time")
@@ -306,27 +329,21 @@ with st.sidebar:
                             if not href.startswith("http"):
                                 href = "https://news.ltn.com.tw/" + href.lstrip("/")
                             
-                            # 日期解析
-                            try:
-                                if time_tag:
-                                    date_str = time_tag.text.strip().split()[0] # 取出 2025/01/13
-                                    date_obj = datetime.strptime(date_str, "%Y/%m/%d")
+                            # 解析日期
+                            if time_tag:
+                                date_obj = parse_flexible_date(time_tag.text.strip())
+                                if date_obj:
                                     append_news(title, href, date_obj, "自由時報", cat)
-                            except:
-                                continue
                 except Exception as e:
-                    print(f"LTN Error: {e}")
+                    print(f"LTN Error on {url}: {e}")
 
             # --- 5. ETtoday 修復版 ---
             for kw in keywords:
                 try:
-                    # 使用 idx=1 強制進入列表模式
                     u = f"https://www.ettoday.net/news_search/doSearch.php?search_term_string={quote(kw)}&idx=1"
                     res = requests.get(u, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
                     soup = BeautifulSoup(res.text, "html.parser")
                     
-                    # ETtoday 列表結構通常在 .archive_list 內的 .box_2
-                    # 必須確認 h2 存在 (有時候會有廣告插在裡面)
                     articles = soup.select("div.archive_list div.box_2")
                     
                     for art in articles:
@@ -338,24 +355,14 @@ with st.sidebar:
                         
                         date_tag = art.find("span", class_="date")
                         if date_tag:
-                            # 格式: "2025/01/13 10:00)" 或 "2025/01/13 10:00"
-                            try:
-                                d_str = date_tag.text.strip()
-                                # 移除可能存在的括號或多餘文字
-                                d_str = d_str.replace("(", "").replace(")", "").split(" ")[0] # 只取日期部分 yyyy/mm/dd
-                                date_obj = datetime.strptime(d_str, "%Y/%m/%d")
+                            date_obj = parse_flexible_date(date_tag.text.strip())
+                            if date_obj:
                                 append_news(title, href, date_obj, "ETtoday", kw)
-                            except:
-                                continue
                 except Exception as e:
-                    print(f"ETtoday Error: {e}")
+                    print(f"ETtoday Error on {kw}: {e}")
 
             # --- 6. 行政院公報 (暫時略過) ---
-            # try:
-            #     # (原代碼已註解)
-            #     pass
-            # except Exception as e:
-            #     pass
+            # pass 
 
             # --- 結果彙整 ---
             if titles:
@@ -365,7 +372,6 @@ with st.sidebar:
                     "標題": titles, "網址": links, "AI 新聞摘要": ""
                 }).drop_duplicates(subset=["標題"]).sort_values(by="日期", ascending=False).reset_index(drop=True)
                 
-                # 建立隱藏的原文連結欄位供 UI 顯示
                 df["原文連結"] = df["網址"] 
                 st.session_state.edited_df = df
                 st.success(f"✅ 抓取完成！共 {len(df)} 筆新聞。")
