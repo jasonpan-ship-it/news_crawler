@@ -49,7 +49,7 @@ def build_html_body(title_text, df, show_company_col=True):
     intro = f"""
     {title_text}<br>
     <p style="color:gray; font-style:italic;">
-    (抓取包含 <a href="#">特定關鍵字</a> 的新聞，如果需要增加新聞網站或關鍵字請聯繫JP)</p>
+    (抓取包含 <a href="https://docs.google.com/spreadsheets/d/1b2UEnsJ0hASkqpR3n9VgfLoIkTRgrHtm8aYbzRho5BA/edit?gid=235006464#gid=235006464">特定關鍵字</a> 的新聞，如果需要增加新聞網站或關鍵字請聯繫JP)</p>
     """
     
     html_rows = ""
@@ -156,14 +156,11 @@ with st.sidebar:
     e_date = st.date_input("結束日期", today_dt)
     
     if st.button("🚀 執行爬蟲", use_container_width=True):
-        # 引入 urllib3 用來關閉 SSL 警告
+        # 引入 urllib3 用來關閉 SSL 警告 (ETtoday 必需)
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-        status_area = st.empty() 
-        log_area = st.expander("🔍 爬蟲詳細日誌 (若抓不到資料請點開檢查)", expanded=True)
         
-        with st.spinner("正在啟動強力爬蟲 (含 UDN)..."):
+        with st.spinner("正在搜尋各大新聞網..."):
             # 時間設定
             start_date_obj = datetime.combine(s_date, datetime.min.time())
             end_date_obj = datetime.combine(e_date, datetime.max.time())
@@ -192,8 +189,6 @@ with st.sidebar:
             def find_company_keywords(text):
                 return [k for k in company_keywords if k in text]
 
-            # 統計數據
-            stats = {"Yahoo": 0, "UDN": 0, "MoneyDJ": 0, "LTN": 0, "ETtoday": 0}
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
             # ==========================================
@@ -233,7 +228,6 @@ with st.sidebar:
                                     categories.append(kw)
                                     titles.append(title)
                                     links.append(full_link)
-                                    stats["Yahoo"] += 1
                                     
                                     mk = [k for k in title_keywords if k in title]
                                     mck = find_company_keywords(title)
@@ -241,23 +235,18 @@ with st.sidebar:
                                     company_matches.append(",".join(mck) if mck else "-")
                         except: continue
                 except: continue
-            
-            log_area.write(f"Yahoo 搜尋完成，暫存 {stats['Yahoo']} 筆")
 
             # ==========================================
-            # 2. UDN 聯合新聞網 (已整合與優化)
+            # 2. UDN 聯合新聞網
             # ==========================================
             for kw in keywords:
                 try:
-                    # 使用 requests 替代 req (urllib) 以保持一致性和 SSL 處理
                     url = f"https://udn.com/search/word/2/{quote(kw)}"
                     res = requests.get(url, headers=headers, timeout=10)
                     soup = BeautifulSoup(res.text, "html.parser")
                     
                     ti_box = soup.find("div", class_="context-box__content story-list__holder")
-                    # 有時候 class 名稱會有點不同，容錯處理
-                    if not ti_box:
-                        ti_box = soup.find("div", class_="story-list__holder")
+                    if not ti_box: ti_box = soup.find("div", class_="story-list__holder")
 
                     if not ti_box: continue
                     
@@ -273,7 +262,6 @@ with st.sidebar:
                         title = a_tag.get_text(strip=True)
                         href = a_tag.get("href")
                         
-                        # 日期解析 (使用萬用解析器)
                         date_obj = parse_flexible_date(ti_time[l].get_text(strip=True))
                         
                         if date_obj and start_date_obj <= date_obj <= end_date_obj:
@@ -283,16 +271,12 @@ with st.sidebar:
                                 categories.append(kw)
                                 titles.append(title)
                                 links.append(href)
-                                stats["UDN"] += 1
                                 
                                 mk = [k for k in title_keywords if k in title]
                                 mck = find_company_keywords(title)
                                 title_keyword_matches.append(",".join(mk))
                                 company_matches.append(",".join(mck) if mck else "-")
-                except Exception as e:
-                    log_area.error(f"UDN Error ({kw}): {e}")
-
-            log_area.write(f"UDN 搜尋完成，暫存 {stats['UDN']} 筆")
+                except: continue
 
             # ==========================================
             # 3. 自由時報 (LTN)
@@ -314,9 +298,6 @@ with st.sidebar:
                             soup.select("ul.list li") or \
                             soup.select("div.boxTitle li")
                     
-                    if not items:
-                        log_area.warning(f"LTN: 在 {cat} 找不到任何 li 元素")
-
                     for item in items:
                         if "class" in item.attrs and "ad" in item.attrs["class"]: continue
 
@@ -335,31 +316,25 @@ with st.sidebar:
                         if time_tag:
                             date_obj = parse_flexible_date(time_tag.text)
                         
-                        if date_obj:
-                            if start_date_obj <= date_obj <= end_date_obj:
-                                matched_kws = [k for k in title_keywords if k in title]
-                                if matched_kws:
-                                    dates.append(date_obj.strftime("%Y-%m-%d"))
-                                    sources.append("自由時報")
-                                    categories.append(cat)
-                                    titles.append(title)
-                                    links.append(href)
-                                    title_keyword_matches.append(",".join(matched_kws))
-                                    mck = find_company_keywords(title)
-                                    company_matches.append(",".join(mck) if mck else "-")
-                                    stats["LTN"] += 1
-                except Exception as e:
-                    log_area.error(f"LTN Error ({cat}): {e}")
-
-            log_area.write(f"自由時報 搜尋完成，暫存 {stats['LTN']} 筆")
+                        if date_obj and start_date_obj <= date_obj <= end_date_obj:
+                            matched_kws = [k for k in title_keywords if k in title]
+                            if matched_kws:
+                                dates.append(date_obj.strftime("%Y-%m-%d"))
+                                sources.append("自由時報")
+                                categories.append(cat)
+                                titles.append(title)
+                                links.append(href)
+                                title_keyword_matches.append(",".join(matched_kws))
+                                mck = find_company_keywords(title)
+                                company_matches.append(",".join(mck) if mck else "-")
+                except: continue
 
             # ==========================================
-            # 4. ETtoday (修正 SSL 問題)
+            # 4. ETtoday
             # ==========================================
             for kw in keywords:
                 try:
                     u = f"https://www.ettoday.net/news_search/doSearch.php?search_term_string={quote(kw)}&idx=1"
-                    # 關鍵修正：加入 verify=False 忽略 SSL 驗證
                     res = requests.get(u, headers=headers, timeout=10, verify=False)
                     soup = BeautifulSoup(res.text, "html.parser")
                     
@@ -386,16 +361,12 @@ with st.sidebar:
                                 categories.append(kw)
                                 titles.append(title)
                                 links.append(href)
-                                stats["ETtoday"] += 1
                                 
                                 mk = [k for k in title_keywords if k in title]
                                 mck = find_company_keywords(title)
                                 title_keyword_matches.append(",".join(mk))
                                 company_matches.append(",".join(mck) if mck else "-")
-                except Exception as e:
-                    log_area.error(f"ETtoday Error ({kw}): {e}")
-
-            log_area.write(f"ETtoday 搜尋完成，暫存 {stats['ETtoday']} 筆")
+                except: continue
 
             # --- 彙整結果 ---
             if titles:
@@ -407,10 +378,9 @@ with st.sidebar:
                 
                 df["原文連結"] = df["網址"] 
                 st.session_state.edited_df = df
-                st.success(f"✅ 抓取完成！本次共抓到 {len(df)} 筆。 (Yahoo:{stats['Yahoo']}, UDN:{stats['UDN']}, LTN:{stats['LTN']}, ETtoday:{stats['ETtoday']})")
+                st.success(f"✅ 抓取完成！共 {len(df)} 筆新聞。")
             else:
-                st.error("❌ 依然查無新聞。請展開上方的「詳細日誌」檢查。")
-                st.info(f"偵測範圍: {s_date} 到 {e_date}")
+                st.error("❌ 此日期範圍內查無新聞。")
 
     # 步驟二
     st.header("2️⃣ 產生AI摘要")
