@@ -1,161 +1,4 @@
-import streamlit as st
-import pandas as pd
-import requests
-from bs4 import BeautifulSoup
-from openai import OpenAI
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from email.header import Header
-from email.utils import formataddr
-from urllib.parse import quote
-import urllib.request as req
-import bs4
-from datetime import datetime
-import datetime as dt
-from pandas.tseries.offsets import BusinessDay
-import warnings
-import time as tt
-
-# 忽略警告
-warnings.filterwarnings("ignore", category=FutureWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-# --- 1. 介面初始化 ---
-st.set_page_config(page_title="綠能新聞發佈系統", page_icon="⚡", layout="wide")
-
-if 'edited_df' not in st.session_state:
-    st.session_state.edited_df = pd.DataFrame()
-
-# --- 2. 工具函式 ---
-def extract_webpage_text(url):
-    try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
-        for tag in ['article', 'main', 'div']:
-            content = soup.find(tag)
-            if content and len(content.text.strip()) > 200:
-                return content.get_text(separator="\n", strip=True)
-        return soup.get_text(separator="\n", strip=True)
-    except:
-        return ""
-
-def build_html_body(title_text, df, show_company_col=True):
-    """
-    建立符合您格式要求的 HTML 表格
-    show_company_col: 控制是否顯示「公司」欄位
-    """
-    intro = f"""
-    {title_text}<br>
-    <p style="color:gray; font-style:italic;">
-    (抓取包含 <a href="#">特定關鍵字</a> 的新聞，如果需要增加新聞網站或關鍵字請聯繫JP)</p>
-    """
-    
-    html_rows = ""
-    for _, row in df.iterrows():
-        # 日期格式化
-        try:
-            d_str = datetime.strptime(str(row['日期']), "%Y-%m-%d").strftime("%m/%d")
-        except:
-            d_str = str(row['日期'])
-
-        # 公司關鍵字顯示處理
-        comp_kw = row.get('包含公司關鍵字', '-')
-        if pd.isna(comp_kw) or comp_kw == "": comp_kw = "-"
-
-        # 根據參數決定是否產生公司欄位的 HTML
-        company_td = f"<td style='border:1px solid #333; padding:8px;'>{comp_kw}</td>" if show_company_col else ""
-
-        html_rows += f"""
-        <tr>
-            <td style='border:1px solid #333; padding:8px;'>{d_str}</td>
-            <td style='border:1px solid #333; padding:8px;'><a href='{row['網址']}'>{row['標題']}</a></td>
-            {company_td}
-            <td style='border:1px solid #333; padding:8px;'>{row.get('AI 新聞摘要', '')}</td>
-        </tr>"""
-    
-    # 表頭處理：根據參數決定是否顯示「公司」表頭
-    company_th = '<th style="width:10%;">公司</th>' if show_company_col else ''
-    
-    # 調整摘要欄位寬度 (如果隱藏公司欄，摘要欄可以寬一點)
-    summary_width = "60%" if show_company_col else "70%"
-
-    table_html = f"""
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 14px; border: 1px solid #333;">
-        <thead><tr style="background-color: #f2f2f2; text-align: left;">
-            <th style="width:5%;">日期</th>
-            <th style="width:25%;">標題</th>
-            {company_th}
-            <th style="width:{summary_width};">AI摘要</th>
-        </tr></thead>
-        <tbody>{html_rows}</tbody>
-    </table>
-    """
-    return f"<html><body>{intro}{table_html}</body></html>"
-
-def send_split_emails(df):
-    sender = st.secrets["EMAIL_SENDER"]
-    password = st.secrets["EMAIL_PASSWORD"]
-    receiver = st.secrets["EMAIL_RECEIVER"]
-    today_str = datetime.now().strftime("%Y-%m-%d")
-
-    # 設定顯示名稱
-    SENDER_NAME = "每日新聞小幫手" 
-    RECEIVER_NAME = "麗升能源集團" 
-
-    # 邏輯：有公司關鍵字 -> Group A (競業)；沒有 -> Group B (產業)
-    def has_company_kw(val):
-        if not val or pd.isna(val): return False
-        s = str(val).strip().replace("-", "")
-        return len(s) > 0
-
-    group_a = df[df['包含公司關鍵字'].apply(has_company_kw)]
-    group_b = df[~df['包含公司關鍵字'].apply(has_company_kw)]
-
-    try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(sender, password)
-            
-            # 發送 Group A: 競業新聞 (顯示公司欄位)
-            if not group_a.empty:
-                msg = MIMEMultipart()
-                msg['Subject'] = f"{today_str} 競業新聞整理"
-                msg['From'] = formataddr((str(Header(SENDER_NAME, 'utf-8')), sender))
-                msg['To'] = formataddr((str(Header(RECEIVER_NAME, 'utf-8')), receiver))
-                
-                # show_company_col=True -> 顯示公司欄位
-                msg.attach(MIMEText(build_html_body("本日競業新聞整理如下：", group_a, show_company_col=True), 'html'))
-                server.send_message(msg)
-                st.toast(f"✅ 競業新聞 ({len(group_a)} 封) 已發送")
-
-            # 發送 Group B: 產業新聞 (隱藏公司欄位)
-            if not group_b.empty:
-                msg = MIMEMultipart()
-                msg['Subject'] = f"{today_str} 產業新聞整理"
-                msg['From'] = formataddr((str(Header(SENDER_NAME, 'utf-8')), sender))
-                msg['To'] = formataddr((str(Header(RECEIVER_NAME, 'utf-8')), receiver))
-                
-                # show_company_col=False -> 隱藏公司欄位
-                msg.attach(MIMEText(build_html_body("本日產業新聞整理如下：", group_b, show_company_col=False), 'html'))
-                server.send_message(msg)
-                st.toast(f"✅ 產業新聞 ({len(group_b)} 封) 已發送")
-        return True
-    except Exception as e:
-        st.error(f"發信失敗: {e}")
-        return False
-
-# --- 3. 側邊欄 ---
-with st.sidebar:
-    st.title("⚡ 綠能新聞爬蟲")
-    
-    st.header("1️⃣ 抓取新聞資料")
-    today_dt = pd.Timestamp.now().normalize()
-    last_bus_day = (today_dt - BusinessDay(1)).to_pydatetime()
-    s_date = st.date_input("開始日期", last_bus_day)
-    e_date = st.date_input("結束日期", today_dt)
-    
-    if st.button("🚀 執行爬蟲", use_container_width=True):
+if st.button("🚀 執行爬蟲", use_container_width=True):
         # 引入 urllib3 用來關閉 SSL 警告
         import urllib3
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -163,7 +6,7 @@ with st.sidebar:
         status_area = st.empty() 
         log_area = st.expander("🔍 爬蟲詳細日誌 (若抓不到資料請點開檢查)", expanded=True)
         
-        with st.spinner("正在啟動強力爬蟲..."):
+        with st.spinner("正在啟動強力爬蟲 (含 UDN)..."):
             # 時間設定
             start_date_obj = datetime.combine(s_date, datetime.min.time())
             end_date_obj = datetime.combine(e_date, datetime.max.time())
@@ -171,7 +14,7 @@ with st.sidebar:
             # 初始化儲存空間
             dates, sources, categories, company_matches, title_keyword_matches, titles, links = [], [], [], [], [], [], []
             
-            # --- 關鍵字定義 (確保放在最前面) ---
+            # --- 關鍵字定義 ---
             keywords = ["太陽能", "再生能源", "電廠", "綠電", "光電",  "風電", "儲能", "綠電交易", "麗升能源", "綠能"]
             
             title_keywords = ["小水力","光電","綠能","綠電","風能","太陽能","再生","儲能","減碳","ESG","電池","地熱","風力","發電","魚塭","土地","水力","淨零","漁電","光儲","低地力","售電","台電","配電","輸電","升壓","環社","用電大戶","饋線","電表","表前","表後","需量反應","電網","土地開發","電廠","備轉","調頻","PCS","EMS","BMS","電力交易","併網","籌設","風電","電價","電業","香夾蘭","農業補助","CPPA","農電","農業設施許可","沼氣","生質能","Solar","PV","energy","solar","storage","光伏","能源政策","碳權","碳費","躉購","能源署","電業法","躉購費率","漁電共生"]
@@ -194,11 +37,11 @@ with st.sidebar:
 
             # 統計數據
             stats = {"Yahoo": 0, "UDN": 0, "MoneyDJ": 0, "LTN": 0, "ETtoday": 0}
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
 
             # ==========================================
             # 1. Yahoo 爬蟲
             # ==========================================
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
             for kw in keywords:
                 try:
                     res = requests.get(f"https://tw.news.yahoo.com/search?p={quote(kw)}", headers=headers, timeout=5)
@@ -245,7 +88,57 @@ with st.sidebar:
             log_area.write(f"Yahoo 搜尋完成，暫存 {stats['Yahoo']} 筆")
 
             # ==========================================
-            # 2. 自由時報 (LTN)
+            # 2. UDN 聯合新聞網 (已整合與優化)
+            # ==========================================
+            for kw in keywords:
+                try:
+                    # 使用 requests 替代 req (urllib) 以保持一致性和 SSL 處理
+                    url = f"https://udn.com/search/word/2/{quote(kw)}"
+                    res = requests.get(url, headers=headers, timeout=10)
+                    soup = BeautifulSoup(res.text, "html.parser")
+                    
+                    ti_box = soup.find("div", class_="context-box__content story-list__holder")
+                    # 有時候 class 名稱會有點不同，容錯處理
+                    if not ti_box:
+                        ti_box = soup.find("div", class_="story-list__holder")
+
+                    if not ti_box: continue
+                    
+                    ti_h2 = ti_box.find_all("h2")
+                    ti_time = ti_box.find_all("time", class_="story-list__time")
+                    
+                    for l, title_tag in enumerate(ti_h2):
+                        if l >= len(ti_time): break
+
+                        a_tag = title_tag.find("a")
+                        if not a_tag: continue
+                        
+                        title = a_tag.get_text(strip=True)
+                        href = a_tag.get("href")
+                        
+                        # 日期解析 (使用萬用解析器)
+                        date_obj = parse_flexible_date(ti_time[l].get_text(strip=True))
+                        
+                        if date_obj and start_date_obj <= date_obj <= end_date_obj:
+                            if any(k in title for k in title_keywords):
+                                dates.append(date_obj.strftime("%Y-%m-%d"))
+                                sources.append("UDN")
+                                categories.append(kw)
+                                titles.append(title)
+                                links.append(href)
+                                stats["UDN"] += 1
+                                
+                                mk = [k for k in title_keywords if k in title]
+                                mck = find_company_keywords(title)
+                                title_keyword_matches.append(",".join(mk))
+                                company_matches.append(",".join(mck) if mck else "-")
+                except Exception as e:
+                    log_area.error(f"UDN Error ({kw}): {e}")
+
+            log_area.write(f"UDN 搜尋完成，暫存 {stats['UDN']} 筆")
+
+            # ==========================================
+            # 3. 自由時報 (LTN)
             # ==========================================
             ltn_urls = [
                 ("https://news.ltn.com.tw/topic/再生能源", "再生能源"),
@@ -304,11 +197,11 @@ with st.sidebar:
             log_area.write(f"自由時報 搜尋完成，暫存 {stats['LTN']} 筆")
 
             # ==========================================
-            # 3. ETtoday (修正 SSL 問題)
+            # 4. ETtoday (修正 SSL 問題)
             # ==========================================
             for kw in keywords:
                 try:
-                    u = f"https://www.ettoday.net/news_search/doSearch.php?keywords={quote(kw)}&idx=1"
+                    u = f"https://www.ettoday.net/news_search/doSearch.php?search_term_string={quote(kw)}&idx=1"
                     # 關鍵修正：加入 verify=False 忽略 SSL 驗證
                     res = requests.get(u, headers=headers, timeout=10, verify=False)
                     soup = BeautifulSoup(res.text, "html.parser")
@@ -347,29 +240,6 @@ with st.sidebar:
 
             log_area.write(f"ETtoday 搜尋完成，暫存 {stats['ETtoday']} 筆")
 
-             # --- UDN 爬蟲 ---
-            for i in range(len(keywords)):
-                try:
-                    kw = keywords[i]
-                    url = f"https://udn.com/search/word/2/{quote(kw)}"
-                    req_obj = req.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-                    with req.urlopen(req_obj) as response:
-                        data = response.read().decode("utf-8")
-                    soup = bs4.BeautifulSoup(data, "html.parser")
-                    ti_box = soup.find("div", class_="context-box__content story-list__holder story-list__holder--full")
-                    if not ti_box: continue
-                    ti_h2 = ti_box.find_all("h2")
-                    ti_time = ti_box.find_all("time", class_="story-list__time")
-                    for l, title_tag in enumerate(ti_h2):
-                        a_tag = title_tag.find("a")
-                        if not a_tag or l >= len(ti_time): continue
-                        title = a_tag.get_text(strip=True)
-                        href = a_tag.get("href")
-                        try:
-                            date_obj = datetime.strptime(ti_time[l].get_text(strip=True)[:10], "%Y-%m-%d")
-                            append_news(title, href, date_obj, "UDN", kw)
-                        except: continue
-
             # --- 彙整結果 ---
             if titles:
                 df = pd.DataFrame({
@@ -380,60 +250,7 @@ with st.sidebar:
                 
                 df["原文連結"] = df["網址"] 
                 st.session_state.edited_df = df
-                st.success(f"✅ 抓取完成！本次共抓到 {len(df)} 筆。 (Yahoo:{stats['Yahoo']}, LTN:{stats['LTN']}, ETtoday:{stats['ETtoday']})")
+                st.success(f"✅ 抓取完成！本次共抓到 {len(df)} 筆。 (Yahoo:{stats['Yahoo']}, UDN:{stats['UDN']}, LTN:{stats['LTN']}, ETtoday:{stats['ETtoday']})")
             else:
                 st.error("❌ 依然查無新聞。請展開上方的「詳細日誌」檢查。")
                 st.info(f"偵測範圍: {s_date} 到 {e_date}")
-
-    # 步驟二
-    st.header("2️⃣ 產生AI摘要")
-    if st.button("點我", use_container_width=True):
-        if not st.session_state.edited_df.empty:
-            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-            for idx, row in st.session_state.edited_df.iterrows():
-                if not row['AI 新聞摘要']:
-                    st.write(f"摘要產生中: {row['標題'][:15]}...")
-                    text = extract_webpage_text(row['網址'])
-                    if text:
-                        try:
-                            res = client.chat.completions.create(
-                                model="gpt-4o-mini",
-                                messages=[{"role": "user", "content": f"請以繁體中文摘要約40個字：\n\n{text[:2500]}"}]
-                            )
-                            st.session_state.edited_df.at[idx, 'AI 新聞摘要'] = res.choices[0].message.content.strip()
-                        except: pass
-            st.rerun()
-
-    st.divider()
-
-    # 步驟三
-    st.header("3️⃣ 正式發信")
-    if st.button("發信給全公司", use_container_width=True):
-        if not st.session_state.edited_df.empty:
-            if send_split_emails(st.session_state.edited_df):
-                st.balloons()
-                st.success("✅ 所有信件發送完成！")
-        else:
-            st.warning("⚠️ 畫面上沒有資料。")
-
-# --- 4. 主畫面 ---
-st.write("### 📝 編輯發佈清單")
-st.caption("提示：選取行並按 Delete 可刪除；欄位可依據發信需求手動修改，有公司關鍵字的會發在「競業新聞」、沒關鍵字的會發在「產業新聞」。")
-
-if not st.session_state.edited_df.empty:
-    st.session_state.edited_df = st.data_editor(
-        st.session_state.edited_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        column_config={
-            "日期": st.column_config.TextColumn("日期", disabled=True),
-            "標題": st.column_config.TextColumn("標題", width="large"),
-            "原文連結": st.column_config.LinkColumn("連結", display_text="(查看)", width="small"),
-            "網址": None, # 隱藏原始網址
-            "包含公司關鍵字": st.column_config.TextColumn("公司關鍵字", width="medium"),
-            "AI 新聞摘要": st.column_config.TextColumn("AI 新聞摘要", width="large")
-        },
-        column_order=["日期", "來源", "標題", "原文連結", "包含公司關鍵字", "AI 新聞摘要"]
-    )
-else:
-    st.info("👈 請先從左側執行「步驟一」抓取新聞。")
