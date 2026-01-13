@@ -347,6 +347,29 @@ with st.sidebar:
 
             log_area.write(f"ETtoday 搜尋完成，暫存 {stats['ETtoday']} 筆")
 
+             # --- UDN 爬蟲 ---
+            for i in range(len(keywords)):
+                try:
+                    kw = keywords[i]
+                    url = f"https://udn.com/search/word/2/{quote(kw)}"
+                    req_obj = req.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                    with req.urlopen(req_obj) as response:
+                        data = response.read().decode("utf-8")
+                    soup = bs4.BeautifulSoup(data, "html.parser")
+                    ti_box = soup.find("div", class_="context-box__content story-list__holder story-list__holder--full")
+                    if not ti_box: continue
+                    ti_h2 = ti_box.find_all("h2")
+                    ti_time = ti_box.find_all("time", class_="story-list__time")
+                    for l, title_tag in enumerate(ti_h2):
+                        a_tag = title_tag.find("a")
+                        if not a_tag or l >= len(ti_time): continue
+                        title = a_tag.get_text(strip=True)
+                        href = a_tag.get("href")
+                        try:
+                            date_obj = datetime.strptime(ti_time[l].get_text(strip=True)[:10], "%Y-%m-%d")
+                            append_news(title, href, date_obj, "UDN", kw)
+                        except: continue
+
             # --- 彙整結果 ---
             if titles:
                 df = pd.DataFrame({
