@@ -368,6 +368,79 @@ with st.sidebar:
                                 company_matches.append(",".join(mck) if mck else "-")
                 except: continue
 
+
+            # ==========================================
+            # 5. 經濟日報 (money.udn.com)
+            # ==========================================
+            for kw in keywords:
+                try:
+                    url = f"https://money.udn.com/search/result/1001/{quote(kw)}?search_type=title"
+                    res = requests.get(url, headers=headers, timeout=10)
+                    soup = BeautifulSoup(res.text, "html.parser")
+                    items = [li for li in soup.find_all("li")
+                             if li.find("a", href=lambda h: h and "/money/story/" in h)]
+                    for item in items:
+                        a_tags = item.find_all("a", href=lambda h: h and "/money/story/" in h)
+                        if not a_tags:
+                            continue
+                        content_a = next((a for a in a_tags if a.find(["h2", "h3"])), a_tags[-1])
+                        h_tag = content_a.find(["h2", "h3"])
+                        title = h_tag.get_text(strip=True) if h_tag else content_a.get_text(strip=True)
+                        href = content_a.get("href", "")
+                        if not href.startswith("http"):
+                            href = "https://money.udn.com" + href
+                        date_obj = None
+                        for s in item.stripped_strings:
+                            if len(s) >= 10 and s[4:5] == '-' and s[7:8] == '-':
+                                date_obj = parse_flexible_date(s)
+                                break
+                        if date_obj and start_date_obj <= date_obj <= end_date_obj:
+                            if any(k in title for k in title_keywords):
+                                dates.append(date_obj.strftime("%Y-%m-%d"))
+                                sources.append("經濟日報")
+                                categories.append(kw)
+                                titles.append(title)
+                                links.append(href)
+                                mk = [k for k in title_keywords if k in title]
+                                mck = find_company_keywords(title)
+                                title_keyword_matches.append(",".join(mk))
+                                company_matches.append(",".join(mck) if mck else "-")
+                except:
+                    continue
+
+            # ==========================================
+            # 6. 工商時報 (ctee.com.tw)
+            # ==========================================
+            for kw in keywords:
+                try:
+                    url = f"https://www.ctee.com.tw/search/{quote(kw)}"
+                    res = requests.get(url, headers=headers, timeout=10)
+                    soup = BeautifulSoup(res.text, "html.parser")
+                    cards = soup.select("div.newslist__card")
+                    for card in cards:
+                        h_tag = card.select_one("h3.news-title a")
+                        time_tag = card.select_one("time.news-time")
+                        if not h_tag or not time_tag:
+                            continue
+                        title = h_tag.get_text(strip=True)
+                        href = h_tag.get("href", "")
+                        if not href.startswith("http"):
+                            href = "https://www.ctee.com.tw" + href
+                        date_obj = parse_flexible_date(time_tag.get_text(strip=True))
+                        if date_obj and start_date_obj <= date_obj <= end_date_obj:
+                            if any(k in title for k in title_keywords):
+                                dates.append(date_obj.strftime("%Y-%m-%d"))
+                                sources.append("工商時報")
+                                categories.append(kw)
+                                titles.append(title)
+                                links.append(href)
+                                mk = [k for k in title_keywords if k in title]
+                                mck = find_company_keywords(title)
+                                title_keyword_matches.append(",".join(mk))
+                                company_matches.append(",".join(mck) if mck else "-")
+                except:
+                    continue
+
             # --- 彙整結果 ---
             if titles:
                 df = pd.DataFrame({
