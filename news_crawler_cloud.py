@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import cloudscraper
 from bs4 import BeautifulSoup
 from openai import OpenAI
 import smtplib
@@ -414,7 +415,7 @@ with st.sidebar:
             for kw in keywords:
                 try:
                     url = f"https://www.ctee.com.tw/search/{quote(kw)}"
-                    res = requests.get(url, headers=headers, timeout=10)
+                    res = cloudscraper.create_scraper().get(url, timeout=15)
                     soup = BeautifulSoup(res.text, "html.parser")
                     cards = soup.select("div.newslist__card")
                     for card in cards:
