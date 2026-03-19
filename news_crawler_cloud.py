@@ -31,8 +31,7 @@ if 'edited_df' not in st.session_state:
 # --- 2. 工具函式 ---
 def extract_webpage_text(url):
     try:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        response = requests.get(url, headers=headers, timeout=10)
+        response = cloudscraper.create_scraper().get(url, timeout=10)
         soup = BeautifulSoup(response.text, "html.parser")
         for tag in ['article', 'main', 'div']:
             content = soup.find(tag)
