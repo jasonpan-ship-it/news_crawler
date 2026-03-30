@@ -30,6 +30,16 @@ if 'edited_df' not in st.session_state:
 
 # --- 2. 工具函式 ---
 def extract_webpage_text(url):
+    # 先嘗試 Jina AI Reader（可繞過 IP 封鎖）
+    try:
+        jina_url = f"https://r.jina.ai/{url}"
+        response = requests.get(jina_url, headers={"Accept": "text/plain"}, timeout=15)
+        text = response.text.strip()
+        if len(text) > 200 and "工商時報因資訊安全" not in text:
+            return text[:3000]
+    except:
+        pass
+    # Fallback：直接用 cloudscraper
     try:
         response = cloudscraper.create_scraper().get(url, timeout=10)
         soup = BeautifulSoup(response.text, "html.parser")
