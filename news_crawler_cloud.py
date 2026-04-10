@@ -35,7 +35,8 @@ def extract_webpage_text(url):
         jina_url = f"https://r.jina.ai/{url}"
         response = requests.get(jina_url, headers={"Accept": "text/plain"}, timeout=15)
         text = response.text.strip()
-        if len(text) > 200 and "工商時報因資訊安全" not in text:
+        block_msgs = ["工商時報因資訊安全", "匿名訪問", "被封鎖至", "DDoS", "Access Denied", "403 Forbidden"]
+        if len(text) > 200 and not any(m in text for m in block_msgs):
             return text[:3000]
     except:
         pass
@@ -474,14 +475,15 @@ with st.sidebar:
                 if not row['AI 新聞摘要']:
                     st.write(f"摘要產生中: {row['標題'][:15]}...")
                     text = extract_webpage_text(row['網址'])
-                    if text:
-                        try:
-                            res = client.chat.completions.create(
-                                model="gpt-4o-mini",
-                                messages=[{"role": "user", "content": f"請以繁體中文摘要約40個字：\n\n{text[:2500]}"}]
-                            )
-                            st.session_state.edited_df.at[idx, 'AI 新聞摘要'] = res.choices[0].message.content.strip()
-                        except: pass
+                    if not text:
+                        text = row['標題']  # 抓不到內文，改用標題產生摘要
+                    try:
+                        res = client.chat.completions.create(
+                            model="gpt-4o-mini",
+                            messages=[{"role": "user", "content": f"請以繁體中文摘要約40個字：\n\n{text[:2500]}"}]
+                        )
+                        st.session_state.edited_df.at[idx, 'AI 新聞摘要'] = res.choices[0].message.content.strip()
+                    except: pass
             st.rerun()
 
     st.divider()
