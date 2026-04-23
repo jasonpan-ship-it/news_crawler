@@ -106,8 +106,7 @@ def build_html_body(title_text, df, show_company_col=True):
     return f"<html><body>{intro}{table_html}</body></html>"
 
 def send_split_emails(df):
-    auth_email = st.secrets["EMAIL_AUTH"]     # 登入 SMTP 用的帳號
-    from_email = st.secrets["EMAIL_FROM"]     # From 顯示的群組信箱
+    sender = st.secrets["EMAIL_SENDER"]
     password = st.secrets["EMAIL_PASSWORD"]
     receiver = st.secrets["EMAIL_RECEIVER"]
     today_str = datetime.now().strftime("%Y-%m-%d")
@@ -127,13 +126,13 @@ def send_split_emails(df):
 
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(auth_email, password)
+            server.login(sender, password)
             
             # 發送 Group A: 競業新聞 (顯示公司欄位)
             if not group_a.empty:
                 msg = MIMEMultipart()
                 msg['Subject'] = f"{today_str} 競業新聞整理"
-                msg['From'] = formataddr((str(Header(SENDER_NAME, 'utf-8')), from_email))
+                msg['From'] = formataddr((str(Header(SENDER_NAME, 'utf-8')), sender))
                 msg['To'] = formataddr((str(Header(RECEIVER_NAME, 'utf-8')), receiver))
                 
                 # show_company_col=True -> 顯示公司欄位
@@ -145,7 +144,7 @@ def send_split_emails(df):
             if not group_b.empty:
                 msg = MIMEMultipart()
                 msg['Subject'] = f"{today_str} 產業新聞整理"
-                msg['From'] = formataddr((str(Header(SENDER_NAME, 'utf-8')), from_email))
+                msg['From'] = formataddr((str(Header(SENDER_NAME, 'utf-8')), sender))
                 msg['To'] = formataddr((str(Header(RECEIVER_NAME, 'utf-8')), receiver))
                 
                 # show_company_col=False -> 隱藏公司欄位
