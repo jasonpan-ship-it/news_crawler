@@ -30,25 +30,41 @@ if 'edited_df' not in st.session_state:
 
 # --- 2. 工具函式 ---
 def extract_webpage_text(url):
-    # 先嘗試 Jina AI Reader（可繞過 IP 封鎖）
+    block_msgs = ["工商時報因資訊安全", "工商時報因網路安全",
+                  "匿名訪問", "被封鎖至", "DDoS", "Access Denied", "403 Forbidden"]
+    # Route 1: Jina AI Reader（繞過 IP 封鎖）
     try:
         jina_url = f"https://r.jina.ai/{url}"
         response = requests.get(jina_url, headers={"Accept": "text/plain"}, timeout=15)
         text = response.text.strip()
-        block_msgs = ["工商時報因資訊安全", "匿名訪問", "被封鎖至", "DDoS", "Access Denied", "403 Forbidden"]
         if len(text) > 200 and not any(m in text for m in block_msgs):
             return text[:3000]
     except:
         pass
-    # Fallback：直接用 cloudscraper
+    # Route 2: 12ft.io（繞過付費牆與封鎖）
+    try:
+        response = requests.get(f"https://12ft.io/proxy?q={url}", timeout=15)
+        raw = response.text
+        if not any(m in raw for m in block_msgs):
+            soup = BeautifulSoup(raw, "html.parser")
+            for tag in ['article', 'main', 'div']:
+                content = soup.find(tag)
+                if content and len(content.text.strip()) > 200:
+                    return content.get_text(separator="\n", strip=True)[:3000]
+    except:
+        pass
+    # Route 3: cloudscraper（直接訪問）
     try:
         response = cloudscraper.create_scraper().get(url, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
+        raw = response.text
+        if any(m in raw for m in block_msgs):
+            return ""
+        soup = BeautifulSoup(raw, "html.parser")
         for tag in ['article', 'main', 'div']:
             content = soup.find(tag)
             if content and len(content.text.strip()) > 200:
-                return content.get_text(separator="\n", strip=True)
-        return soup.get_text(separator="\n", strip=True)
+                return content.get_text(separator="\n", strip=True)[:3000]
+        return soup.get_text(separator="\n", strip=True)[:3000]
     except:
         return ""
 
